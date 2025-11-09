@@ -1,0 +1,22 @@
+# Python / Django
+venv/
+**/__pycache__/
+*.py[cod]
+*.pyo
+.python-version
+.pytest_cache/
+*.log
+
+# Django project paths
+db.sqlite3
+media/
+staticfiles/
+local_settings.py
+
+# Env files
+.env
+.env.*
+
+# Editors / IDE
+.vscode/
+.idea/
