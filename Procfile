@@ -1,1 +1,1 @@
-web: sh -c "python manage.py migrate --noinput && python manage.py collectstatic --noinput && gunicorn academy.wsgi --bind 0.0.0.0:8080 --access-logfile - --error-logfile -"
+web: gunicorn academy.wsgi --bind 0.0.0.0:8080 --access-logfile - --error-logfile -
