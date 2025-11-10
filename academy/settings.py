@@ -1,4 +1,5 @@
 import os
+from urllib.parse import urlparse
 from pathlib import Path
 from datetime import timedelta
 
@@ -61,8 +62,40 @@ TEMPLATES = [
 WSGI_APPLICATION = "academy.wsgi.application"
 ASGI_APPLICATION = "academy.asgi.application"
 
-# Database: default sqlite; switch to Postgres via env vars
-if os.getenv("DB_NAME"):
+"""
+Database configuration
+
+Priority order:
+1) DATABASE_URL / POSTGRES_URL / PG_URL (single connection string)
+2) PG* environment variables (PGDATABASE, PGUSER, etc.)
+3) DB_* environment variables (DB_NAME, DB_USER, etc.)
+4) Fallback to SQLite
+"""
+_db_url = os.getenv("DATABASE_URL") or os.getenv("POSTGRES_URL") or os.getenv("PG_URL")
+if _db_url:
+    parsed = urlparse(_db_url)
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": (parsed.path or "/").lstrip("/"),
+            "USER": parsed.username,
+            "PASSWORD": parsed.password,
+            "HOST": parsed.hostname,
+            "PORT": str(parsed.port or 5432),
+        }
+    }
+elif os.getenv("PGDATABASE"):
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.getenv("PGDATABASE"),
+            "USER": os.getenv("PGUSER"),
+            "PASSWORD": os.getenv("PGPASSWORD"),
+            "HOST": os.getenv("PGHOST", "localhost"),
+            "PORT": os.getenv("PGPORT", "5432"),
+        }
+    }
+elif os.getenv("DB_NAME"):
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",
