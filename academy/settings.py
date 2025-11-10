@@ -3,6 +3,7 @@ from pathlib import Path
 from datetime import timedelta
 
 from dotenv import load_dotenv
+from corsheaders.defaults import default_headers, default_methods
 
 load_dotenv()
 
@@ -129,6 +130,15 @@ else:
         CORS_ALLOWED_ORIGINS = [
             "https://football-academy-frontend.vercel.app",
         ]
+
+# Explicitly allow common headers/methods for preflight and JWT usage
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    "authorization",
+    "content-type",
+]
+CORS_ALLOW_METHODS = list(default_methods) + [
+    "OPTIONS",
+]
 
 # Optional CSRF trusted origins (useful when behind HTTPS/proxies)
 _csrf_origins_env = os.getenv("DJANGO_CSRF_TRUSTED_ORIGINS", "").strip()
