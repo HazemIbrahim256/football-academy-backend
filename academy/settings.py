@@ -127,8 +127,7 @@ else:
         CORS_ALLOWED_ORIGINS = [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
     else:
         CORS_ALLOWED_ORIGINS = [
-            "http://localhost:3000",
-            "http://127.0.0.1:3000",
+            "https://football-academy-frontend.vercel.app",
         ]
 
 # Optional CSRF trusted origins (useful when behind HTTPS/proxies)
