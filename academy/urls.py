@@ -4,6 +4,7 @@ from django.contrib import admin
 from django.urls import path, include
 from rest_framework import routers
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from django.http import JsonResponse
 
 from core.views import CoachViewSet, GroupViewSet, PlayerViewSet, PlayerEvaluationViewSet, SignupView, MeView, ChangePasswordView
 
@@ -15,6 +16,7 @@ router.register(r"evaluations", PlayerEvaluationViewSet, basename="evaluation")
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("health/", lambda request: JsonResponse({"status": "ok"})),
     path("api/", include(router.urls)),
     path("api/auth/signup/", SignupView.as_view(), name="signup"),
     path("api/auth/me/", MeView.as_view(), name="me"),
