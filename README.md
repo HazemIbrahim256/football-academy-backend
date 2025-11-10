@@ -77,3 +77,14 @@ Notes:
 - Create an admin user (if needed): `python manage.py createsuperuser`
 - Run behind a production server (ASGI/Wsgi), e.g., `uvicorn`/`gunicorn` with a reverse proxy (Nginx/IIS/Apache) and TLS
 - Monitor logs and errors; rotate secret keys appropriately
+
+## Railway (Backend) Notes
+
+- Ensure `gunicorn` is installed (included in `requirements.txt`).
+- Railway reads `Procfile` automatically. Start command provided:
+  - `web: gunicorn academy.wsgi --bind 0.0.0.0:$PORT`
+- Recommended environment variables on Railway:
+  - `DJANGO_DEBUG=false`
+  - `DJANGO_ALLOWED_HOSTS=football-academy-backend-production.up.railway.app`
+  - `DJANGO_CORS_ALLOWED_ORIGINS=https://football-academy-frontend.vercel.app`
+  - Optionally `DJANGO_CSRF_TRUSTED_ORIGINS=https://football-academy-frontend.vercel.app`
