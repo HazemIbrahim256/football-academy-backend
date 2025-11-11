@@ -184,10 +184,10 @@ class PlayerViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         if user.is_staff:
-            return Player.objects.select_related("group__coach__user", "evaluation").all()
+            return Player.objects.select_related("group__coach__user").all()
         coach = getattr(user, "coach_profile", None)
         if coach:
-            return Player.objects.filter(group__coach=coach).select_related("group__coach__user", "evaluation")
+            return Player.objects.filter(group__coach=coach).select_related("group__coach__user")
         return Player.objects.none()
 
     def destroy(self, request, *args, **kwargs):
@@ -237,16 +237,27 @@ class PlayerEvaluationViewSet(viewsets.ModelViewSet):
     serializer_class = PlayerEvaluationSerializer
     permission_classes = [IsAuthenticated, IsAdminOrCoachWriteOwnGroup]
     filterset_fields = ["player", "coach"]
-    ordering_fields = ["updated_at", "id"]
+    ordering_fields = ["evaluated_at", "updated_at", "id"]
 
     def get_queryset(self):
         user = self.request.user
-        if user.is_staff:
-            return PlayerEvaluation.objects.select_related("player__group__coach__user", "coach").all()
-        coach = getattr(user, "coach_profile", None)
-        if coach:
-            return PlayerEvaluation.objects.filter(player__group__coach=coach).select_related("player__group__coach__user", "coach")
-        return PlayerEvaluation.objects.none()
+        base_qs = PlayerEvaluation.objects.select_related("player__group__coach__user", "coach")
+        if not user.is_staff:
+            coach = getattr(user, "coach_profile", None)
+            if coach:
+                base_qs = base_qs.filter(player__group__coach=coach)
+            else:
+                return PlayerEvaluation.objects.none()
+
+        month_str = self.request.query_params.get("month")
+        if month_str:
+            try:
+                year, month = [int(x) for x in month_str.split("-")]
+                base_qs = base_qs.filter(evaluated_at__year=year, evaluated_at__month=month)
+            except Exception:
+                # Ignore invalid month filter; return base queryset
+                pass
+        return base_qs
 
     def perform_create(self, serializer):
         user = self.request.user
@@ -254,11 +265,6 @@ class PlayerEvaluationViewSet(viewsets.ModelViewSet):
         if not player:
             from rest_framework.exceptions import ValidationError
             raise ValidationError({"player": "This field is required."})
-
-        # Prevent duplicate one-to-one evaluation creation which would raise IntegrityError
-        if PlayerEvaluation.objects.filter(player=player).exists():
-            from rest_framework.exceptions import ValidationError
-            raise ValidationError("An evaluation already exists for this player. Use PATCH/PUT to update.")
 
         if user.is_staff:
             # For staff, associate the evaluation with the player's group's coach

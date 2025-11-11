@@ -1,5 +1,6 @@
 from django.conf import settings
 from datetime import date
+from django.utils import timezone
 from django.contrib.auth.models import User
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
@@ -56,8 +57,9 @@ class Player(models.Model):
 
 
 class PlayerEvaluation(models.Model):
-    player = models.OneToOneField(Player, on_delete=models.CASCADE, related_name="evaluation")
+    player = models.ForeignKey(Player, on_delete=models.CASCADE, related_name="evaluations")
     coach = models.ForeignKey(Coach, on_delete=models.PROTECT, related_name="evaluations")
+    evaluated_at = models.DateField(default=timezone.now)
 
     # Technical Skills
     ball_control = models.IntegerField(null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(5)])

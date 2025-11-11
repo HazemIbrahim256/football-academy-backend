@@ -58,6 +58,7 @@ class PlayerEvaluationSerializer(serializers.ModelSerializer):
             "id",
             "player",
             "coach",
+            "evaluated_at",
             # Technical Skills
             "ball_control",
             "passing",
@@ -97,7 +98,6 @@ class PlayerEvaluationSerializer(serializers.ModelSerializer):
 
 
 class PlayerSerializer(serializers.ModelSerializer):
-    evaluation = PlayerEvaluationSerializer(read_only=True)
     attendance_days = serializers.SerializerMethodField()
 
     class Meta:
@@ -114,7 +114,6 @@ class PlayerSerializer(serializers.ModelSerializer):
             "weight",
             "feet",
             "attendance_days",
-            "evaluation",
         ]
         extra_kwargs = {"age": {"read_only": True}}
 
