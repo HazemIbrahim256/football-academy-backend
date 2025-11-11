@@ -250,12 +250,28 @@ class PlayerEvaluationViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         user = self.request.user
-        if user.is_staff:
-            serializer.save()
-            return
-        coach = getattr(user, "coach_profile", None)
         player = serializer.validated_data.get("player")
-        if not coach or not player or player.group.coach_id != coach.id:
+        if not player:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({"player": "This field is required."})
+
+        # Prevent duplicate one-to-one evaluation creation which would raise IntegrityError
+        if PlayerEvaluation.objects.filter(player=player).exists():
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError("An evaluation already exists for this player. Use PATCH/PUT to update.")
+
+        if user.is_staff:
+            # For staff, associate the evaluation with the player's group's coach
+            coach = getattr(player.group, "coach", None)
+            if not coach:
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError("Player's group has no coach assigned.")
+            serializer.save(coach=coach)
+            return
+
+        # Non-staff coaches must only evaluate players within their own group
+        coach = getattr(user, "coach_profile", None)
+        if not coach or player.group.coach_id != coach.id:
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied("Coaches can only evaluate players in their assigned group.")
         serializer.save(coach=coach)
