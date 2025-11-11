@@ -11,6 +11,7 @@ from reportlab.lib.utils import ImageReader
 
 from django.conf import settings
 from pathlib import Path
+from datetime import datetime
 
 
 def _safe_image(path, width=100, height=100):
@@ -235,6 +236,22 @@ def rating_bilingual_html_from_average(avg: float | None) -> str:
     return rating_bilingual_html(rating_label_from_average(avg))
 
 
+def _latest_evaluation(player):
+    """Return the most recent evaluation for a player, or None.
+
+    Handles the current FK relationship (player.evaluations) and orders by
+    evaluated_at then updated_at, descending.
+    """
+    try:
+        # Use in-memory prefetch when available; otherwise query.
+        qs = getattr(player, "evaluations", None)
+        if qs is None:
+            return None
+        return qs.order_by("-evaluated_at", "-updated_at").first()
+    except Exception:
+        return None
+
+
 def build_group_report(group) -> bytes:
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4)
@@ -249,7 +266,8 @@ def build_group_report(group) -> bytes:
 
     # Summary table with phone and average rating
     data = [["Photo", "Player", "Phone", "Avg"]]
-    for p in group.players.select_related("evaluation").all():
+    # Prefetch evaluations to avoid N+1 queries after relationship change
+    for p in group.players.prefetch_related("evaluations").all():
         img = None
         if p.photo:
             img_path = getattr(p.photo, "path", None)
@@ -257,7 +275,7 @@ def build_group_report(group) -> bytes:
                 img_path = str(Path(settings.MEDIA_ROOT) / p.photo.name)
             img = _safe_image(img_path, width=50, height=50)
         row = [img if img else "", p.name, getattr(p, "phone", "")]
-        ev = getattr(p, "evaluation", None)
+        ev = _latest_evaluation(p)
         if ev:
             row.append(rating_label_from_average(ev.average_rating))
         else:
@@ -352,7 +370,8 @@ def build_player_report(player) -> bytes:
     story.append(header_table)
     story.append(Spacer(1, 8))
 
-    ev = getattr(player, "evaluation", None)
+    # Use the latest evaluation for the player (FK relation)
+    ev = _latest_evaluation(player)
     if ev:
         # Technical Skills
         story.append(Paragraph(with_section_title_html("Technical Skills", english_font_name=small_h3.fontName, arabic_font_name=arabic_font), small_h3))
@@ -454,14 +473,18 @@ def build_player_report(player) -> bytes:
     else:
         story.append(Paragraph("No evaluation available.", styles["Normal"]))
 
-    # Final Arabic note section requested: رأي المدرب وما يحتاج اللاعب تطويره
+    # Final Arabic note section split into two questions
     try:
         story.append(Spacer(1, 10))
-        story.append(Paragraph(_shape_arabic("رأي المدرب وما يحتاج اللاعب تطويره"), arabic_right_heading))
+        story.append(Paragraph(_shape_arabic("رأي المدرب"), arabic_right_heading))
+        story.append(Spacer(1, 6))
+        story.append(Paragraph(_shape_arabic("ما يحتاج اللاعب تطويره"), arabic_right_heading))
     except Exception:
         # Fallback without shaping
         story.append(Spacer(1, 10))
-        story.append(Paragraph("رأي المدرب وما يحتاج اللاعب تطويره", arabic_right_heading))
+        story.append(Paragraph("رأي المدرب", arabic_right_heading))
+        story.append(Spacer(1, 6))
+        story.append(Paragraph("ما يحتاج اللاعب تطويره", arabic_right_heading))
 
     try:
         doc.build(story)
