@@ -5,7 +5,6 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from reportlab import rl_config
 from reportlab.lib.enums import TA_RIGHT
 
 from django.conf import settings
@@ -84,63 +83,24 @@ def with_translation(label: str) -> str:
 
 # Arabic font registration and shaping
 def _register_arabic_font() -> str:
-    """Register and return an Arabic-capable TrueType font name.
+    """Register a font that supports Arabic and return its name.
 
-    - Searches common font locations across Windows, Linux, and macOS.
-    - Prefers Noto Naskh Arabic or DejaVu Sans when available.
-    - Falls back to system fonts like Arial/Tahoma on Windows.
-    - As a last resort, returns "Helvetica" (which will not render Arabic properly).
+    Tries common Windows fonts and a local fonts directory; falls back to Helvetica.
     """
-    # Reuse previously registered font if available
-    if "ArabicFont" in pdfmetrics.getRegisteredFontNames():
-        return "ArabicFont"
-
-    base = Path(__file__).resolve().parent
-    local_fonts = [
-        base / "fonts" / "NotoNaskhArabic-Regular.ttf",
-        base / "fonts" / "DejaVuSans.ttf",
+    candidates = [
+        ("ArabicFont", r"C:\\Windows\\Fonts\\arial.ttf"),
+        ("ArabicFont", r"C:\\Windows\\Fonts\\tahoma.ttf"),
+        ("ArabicFont", r"C:\\Windows\\Fonts\\times.ttf"),
+        ("ArabicFont", r"C:\\Windows\\Fonts\\segoeui.ttf"),
+        ("ArabicFont", r"C:\\Windows\\Fonts\\nirmala.ttf"),
+        ("ArabicFont", str((Path(__file__).resolve().parent / "fonts" / "DejaVuSans.ttf"))),
     ]
-
-    windows_candidates = [
-        Path(r"C:\\Windows\\Fonts\\NotoNaskhArabic-Regular.ttf"),
-        Path(r"C:\\Windows\\Fonts\\arial.ttf"),
-        Path(r"C:\\Windows\\Fonts\\tahoma.ttf"),
-        Path(r"C:\\Windows\\Fonts\\times.ttf"),
-        Path(r"C:\\Windows\\Fonts\\segoeui.ttf"),
-        Path(r"C:\\Windows\\Fonts\\TraditionalArabic.ttf"),
-    ]
-
-    linux_candidates = [
-        Path("/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf"),
-        Path("/usr/share/fonts/opentype/noto/NotoNaskhArabic-Regular.ttf"),
-        Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
-        Path("/usr/share/fonts/truetype/ttf-dejavu/DejaVuSans.ttf"),
-        Path("/usr/share/fonts/truetype/freefont/FreeSans.ttf"),
-    ]
-
-    mac_candidates = [
-        Path("/Library/Fonts/Arial Unicode.ttf"),
-        Path("/Library/Fonts/Arial Unicode MS.ttf"),
-        Path("/Library/Fonts/Tahoma.ttf"),
-        # Geeza Pro is Arabic-capable but often in TTC; skip TTC to avoid errors
-        Path("/Library/Fonts/DejaVuSans.ttf"),
-    ]
-
-    candidates: list[Path] = local_fonts + windows_candidates + linux_candidates + mac_candidates
-
-    # Add local fonts directory to ReportLab TTF search path (harmless if duplicate)
-    try:
-        rl_config.TTFSearchPath = list({*rl_config.TTFSearchPath, str(base / "fonts")} )
-    except Exception:
-        pass
-
-    for path in candidates:
+    for font_name, path in candidates:
         try:
-            if path.exists():
-                pdfmetrics.registerFont(TTFont("ArabicFont", str(path)))
-                return "ArabicFont"
+            if Path(path).exists():
+                pdfmetrics.registerFont(TTFont(font_name, path))
+                return font_name
         except Exception:
-            # Try next candidate
             continue
     return "Helvetica"
 
