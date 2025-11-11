@@ -110,6 +110,9 @@ class PlayerSerializer(serializers.ModelSerializer):
             "birth_date",
             "age",
             "phone",
+            "tall",
+            "weight",
+            "feet",
             "attendance_days",
             "evaluation",
         ]

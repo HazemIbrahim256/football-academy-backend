@@ -31,6 +31,15 @@ class Player(models.Model):
     birth_date = models.DateField(null=True, blank=True)
     age = models.PositiveIntegerField()
     phone = models.CharField(max_length=20, blank=True)
+    # New physical attributes
+    tall = models.PositiveIntegerField(null=True, blank=True)  # height in cm
+    weight = models.PositiveIntegerField(null=True, blank=True)  # weight in kg
+    FEET_CHOICES = (
+        ("L", "Left"),
+        ("R", "Right"),
+        ("B", "Both"),
+    )
+    feet = models.CharField(max_length=1, choices=FEET_CHOICES, null=True, blank=True)
     attendance_days = models.PositiveIntegerField(default=0)
 
     def __str__(self):
