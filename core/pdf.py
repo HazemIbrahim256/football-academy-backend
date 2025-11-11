@@ -5,6 +5,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Table, TableStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+from reportlab import rl_config
 from reportlab.lib.enums import TA_RIGHT
 
 from django.conf import settings
@@ -83,24 +84,63 @@ def with_translation(label: str) -> str:
 
 # Arabic font registration and shaping
 def _register_arabic_font() -> str:
-    """Register a font that supports Arabic and return its name.
+    """Register and return an Arabic-capable TrueType font name.
 
-    Tries common Windows fonts and a local fonts directory; falls back to Helvetica.
+    - Searches common font locations across Windows, Linux, and macOS.
+    - Prefers Noto Naskh Arabic or DejaVu Sans when available.
+    - Falls back to system fonts like Arial/Tahoma on Windows.
+    - As a last resort, returns "Helvetica" (which will not render Arabic properly).
     """
-    candidates = [
-        ("ArabicFont", r"C:\\Windows\\Fonts\\arial.ttf"),
-        ("ArabicFont", r"C:\\Windows\\Fonts\\tahoma.ttf"),
-        ("ArabicFont", r"C:\\Windows\\Fonts\\times.ttf"),
-        ("ArabicFont", r"C:\\Windows\\Fonts\\segoeui.ttf"),
-        ("ArabicFont", r"C:\\Windows\\Fonts\\nirmala.ttf"),
-        ("ArabicFont", str((Path(__file__).resolve().parent / "fonts" / "DejaVuSans.ttf"))),
+    # Reuse previously registered font if available
+    if "ArabicFont" in pdfmetrics.getRegisteredFontNames():
+        return "ArabicFont"
+
+    base = Path(__file__).resolve().parent
+    local_fonts = [
+        base / "fonts" / "NotoNaskhArabic-Regular.ttf",
+        base / "fonts" / "DejaVuSans.ttf",
     ]
-    for font_name, path in candidates:
+
+    windows_candidates = [
+        Path(r"C:\\Windows\\Fonts\\NotoNaskhArabic-Regular.ttf"),
+        Path(r"C:\\Windows\\Fonts\\arial.ttf"),
+        Path(r"C:\\Windows\\Fonts\\tahoma.ttf"),
+        Path(r"C:\\Windows\\Fonts\\times.ttf"),
+        Path(r"C:\\Windows\\Fonts\\segoeui.ttf"),
+        Path(r"C:\\Windows\\Fonts\\TraditionalArabic.ttf"),
+    ]
+
+    linux_candidates = [
+        Path("/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf"),
+        Path("/usr/share/fonts/opentype/noto/NotoNaskhArabic-Regular.ttf"),
+        Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+        Path("/usr/share/fonts/truetype/ttf-dejavu/DejaVuSans.ttf"),
+        Path("/usr/share/fonts/truetype/freefont/FreeSans.ttf"),
+    ]
+
+    mac_candidates = [
+        Path("/Library/Fonts/Arial Unicode.ttf"),
+        Path("/Library/Fonts/Arial Unicode MS.ttf"),
+        Path("/Library/Fonts/Tahoma.ttf"),
+        # Geeza Pro is Arabic-capable but often in TTC; skip TTC to avoid errors
+        Path("/Library/Fonts/DejaVuSans.ttf"),
+    ]
+
+    candidates: list[Path] = local_fonts + windows_candidates + linux_candidates + mac_candidates
+
+    # Add local fonts directory to ReportLab TTF search path (harmless if duplicate)
+    try:
+        rl_config.TTFSearchPath = list({*rl_config.TTFSearchPath, str(base / "fonts")} )
+    except Exception:
+        pass
+
+    for path in candidates:
         try:
-            if Path(path).exists():
-                pdfmetrics.registerFont(TTFont(font_name, path))
-                return font_name
+            if path.exists():
+                pdfmetrics.registerFont(TTFont("ArabicFont", str(path)))
+                return "ArabicFont"
         except Exception:
+            # Try next candidate
             continue
     return "Helvetica"
 
@@ -126,8 +166,19 @@ def with_translation_text(label: str) -> str:
     return label
 
 
+def with_translation_html(label: str, english_font_name: str = "Helvetica", arabic_font_name: str | None = None) -> str:
+    """Return inline bilingual HTML: English / Arabic (shaped), with fonts."""
+    ar_font = arabic_font_name or _register_arabic_font()
+    tr = SKILL_TRANSLATIONS_AR.get(label)
+    if tr:
+        shaped = _shape_arabic(tr)
+        return f'<font name="{english_font_name}">{label}</font> / <font name="{ar_font}">{shaped}</font>'
+    return f'<font name="{english_font_name}">{label}</font>'
+
+
 def with_translation_para(label: str, style) -> Paragraph:
-    return Paragraph(with_translation_text(label), style)
+    html = with_translation_html(label, english_font_name=getattr(style, "fontName", "Helvetica"), arabic_font_name=_register_arabic_font())
+    return Paragraph(html, style)
 
 # Section title translations (bilingual headers)
 SECTION_TRANSLATIONS_AR = {
@@ -143,6 +194,34 @@ def with_section_title_text(title: str) -> str:
     if tr:
         return f"{title} ({_shape_arabic(tr)})"
     return title
+
+def with_section_title_html(title: str, english_font_name: str = "Helvetica", arabic_font_name: str | None = None) -> str:
+    """Inline bilingual section title: English / Arabic (shaped)."""
+    ar_font = arabic_font_name or _register_arabic_font()
+    tr = SECTION_TRANSLATIONS_AR.get(title)
+    if tr:
+        shaped = _shape_arabic(tr)
+        return f'<font name="{english_font_name}">{title}</font> / <font name="{ar_font}">{shaped}</font>'
+    return f'<font name="{english_font_name}">{title}</font>'
+
+# Arabic translations for rating labels
+RATING_TRANSLATIONS_AR = {
+    "Bad": "سيئ",
+    "Not bad": "ليس سيئًا",
+    "Good": "جيد",
+    "Very Good": "جيد جدًا",
+    "Excellent": "ممتاز",
+}
+
+def rating_bilingual_html(value) -> str:
+    label = rating_label(value)
+    ar = RATING_TRANSLATIONS_AR.get(label)
+    if ar:
+        return f'<font name="Helvetica">{label}</font> / <font name="{_register_arabic_font()}">{_shape_arabic(ar)}</font>'
+    return f'<font name="Helvetica">{label}</font>'
+
+def rating_bilingual_html_from_average(avg: float | None) -> str:
+    return rating_bilingual_html(rating_label_from_average(avg))
 
 
 def build_group_report(group) -> bytes:
@@ -180,7 +259,18 @@ def build_group_report(group) -> bytes:
     ]))
     story.append(table)
 
-    doc.build(story)
+    try:
+        doc.build(story)
+    except OSError:
+        # Fallback minimal PDF without images to avoid 500 errors
+        fallback_buffer = BytesIO()
+        fallback_doc = SimpleDocTemplate(fallback_buffer, pagesize=A4)
+        fallback_story = [Paragraph("Group Report", styles["Title"]), Spacer(1, 12), Paragraph(f"Group: {group.name}", styles["Normal"])]
+        fallback_doc.build(fallback_story)
+        pdf = fallback_buffer.getvalue()
+        fallback_buffer.close()
+        buffer.close()
+        return pdf
     pdf = buffer.getvalue()
     buffer.close()
     return pdf
@@ -249,14 +339,14 @@ def build_player_report(player) -> bytes:
     ev = getattr(player, "evaluation", None)
     if ev:
         # Technical Skills
-        story.append(Paragraph(with_section_title_text("Technical Skills"), small_h3_ar))
+        story.append(Paragraph(with_section_title_html("Technical Skills", english_font_name=small_h3.fontName, arabic_font_name=arabic_font), small_h3))
         tech_data = [
             ["Skill", "Rating"],
-            [with_translation_para("Ball control", arabic_label_style), Paragraph(rating_label(ev.ball_control), normal_small)],
-            [with_translation_para("Passing", arabic_label_style), Paragraph(rating_label(ev.passing), normal_small)],
-            [with_translation_para("Dribbling", arabic_label_style), Paragraph(rating_label(ev.dribbling), normal_small)],
-            [with_translation_para("Shooting", arabic_label_style), Paragraph(rating_label(ev.shooting), normal_small)],
-            [with_translation_para("Using both feet", arabic_label_style), Paragraph(rating_label(ev.using_both_feet), normal_small)],
+            [with_translation_para("Ball control", arabic_label_style), Paragraph(rating_bilingual_html(ev.ball_control), normal_small)],
+            [with_translation_para("Passing", arabic_label_style), Paragraph(rating_bilingual_html(ev.passing), normal_small)],
+            [with_translation_para("Dribbling", arabic_label_style), Paragraph(rating_bilingual_html(ev.dribbling), normal_small)],
+            [with_translation_para("Shooting", arabic_label_style), Paragraph(rating_bilingual_html(ev.shooting), normal_small)],
+            [with_translation_para("Using both feet", arabic_label_style), Paragraph(rating_bilingual_html(ev.using_both_feet), normal_small)],
         ]
         tech_table = Table(tech_data, repeatRows=1)
         tech_table.setStyle(TableStyle([
@@ -272,13 +362,13 @@ def build_player_report(player) -> bytes:
         story.append(Spacer(1, 6))
 
         # Physical Abilities
-        story.append(Paragraph(with_section_title_text("Physical Abilities"), small_h3_ar))
+        story.append(Paragraph(with_section_title_html("Physical Abilities", english_font_name=small_h3.fontName, arabic_font_name=arabic_font), small_h3))
         phys_data = [
             ["Attribute", "Rating"],
-            [with_translation_para("Speed", arabic_label_style), Paragraph(rating_label(ev.speed), normal_small)],
-            [with_translation_para("Agility", arabic_label_style), Paragraph(rating_label(ev.agility), normal_small)],
-            [with_translation_para("Endurance", arabic_label_style), Paragraph(rating_label(ev.endurance), normal_small)],
-            [with_translation_para("Strength", arabic_label_style), Paragraph(rating_label(ev.strength), normal_small)],
+            [with_translation_para("Speed", arabic_label_style), Paragraph(rating_bilingual_html(ev.speed), normal_small)],
+            [with_translation_para("Agility", arabic_label_style), Paragraph(rating_bilingual_html(ev.agility), normal_small)],
+            [with_translation_para("Endurance", arabic_label_style), Paragraph(rating_bilingual_html(ev.endurance), normal_small)],
+            [with_translation_para("Strength", arabic_label_style), Paragraph(rating_bilingual_html(ev.strength), normal_small)],
         ]
         phys_table = Table(phys_data, repeatRows=1)
         phys_table.setStyle(TableStyle([
@@ -294,13 +384,13 @@ def build_player_report(player) -> bytes:
         story.append(Spacer(1, 6))
 
         # Technical Understanding
-        story.append(Paragraph(with_section_title_text("Technical Understanding"), small_h3_ar))
+        story.append(Paragraph(with_section_title_html("Technical Understanding", english_font_name=small_h3.fontName, arabic_font_name=arabic_font), small_h3))
         tu_data = [
             ["Aspect", "Rating"],
-            [with_translation_para("Positioning", arabic_label_style), Paragraph(rating_label(ev.positioning), normal_small)],
-            [with_translation_para("Decision making", arabic_label_style), Paragraph(rating_label(ev.decision_making), normal_small)],
-            [with_translation_para("Game awareness", arabic_label_style), Paragraph(rating_label(ev.game_awareness), normal_small)],
-            [with_translation_para("Teamwork", arabic_label_style), Paragraph(rating_label(ev.teamwork), normal_small)],
+            [with_translation_para("Positioning", arabic_label_style), Paragraph(rating_bilingual_html(ev.positioning), normal_small)],
+            [with_translation_para("Decision making", arabic_label_style), Paragraph(rating_bilingual_html(ev.decision_making), normal_small)],
+            [with_translation_para("Game awareness", arabic_label_style), Paragraph(rating_bilingual_html(ev.game_awareness), normal_small)],
+            [with_translation_para("Teamwork", arabic_label_style), Paragraph(rating_bilingual_html(ev.teamwork), normal_small)],
         ]
         tu_table = Table(tu_data, repeatRows=1)
         tu_table.setStyle(TableStyle([
@@ -316,13 +406,13 @@ def build_player_report(player) -> bytes:
         story.append(Spacer(1, 6))
 
         # Psychological and Social
-        story.append(Paragraph(with_section_title_text("Psychological and Social"), small_h3_ar))
+        story.append(Paragraph(with_section_title_html("Psychological and Social", english_font_name=small_h3.fontName, arabic_font_name=arabic_font), small_h3))
         psy_data = [
             ["Aspect", "Rating"],
-            [with_translation_para("Respect", arabic_label_style), Paragraph(rating_label(ev.respect), normal_small)],
-            [with_translation_para("Sportsmanship", arabic_label_style), Paragraph(rating_label(ev.sportsmanship), normal_small)],
-            [with_translation_para("Confidence", arabic_label_style), Paragraph(rating_label(ev.confidence), normal_small)],
-            [with_translation_para("Leadership", arabic_label_style), Paragraph(rating_label(ev.leadership), normal_small)],
+            [with_translation_para("Respect", arabic_label_style), Paragraph(rating_bilingual_html(ev.respect), normal_small)],
+            [with_translation_para("Sportsmanship", arabic_label_style), Paragraph(rating_bilingual_html(ev.sportsmanship), normal_small)],
+            [with_translation_para("Confidence", arabic_label_style), Paragraph(rating_bilingual_html(ev.confidence), normal_small)],
+            [with_translation_para("Leadership", arabic_label_style), Paragraph(rating_bilingual_html(ev.leadership), normal_small)],
         ]
         psy_table = Table(psy_data, repeatRows=1)
         psy_table.setStyle(TableStyle([
@@ -338,8 +428,9 @@ def build_player_report(player) -> bytes:
         story.append(Spacer(1, 6))
 
         # Overall
-        story.append(Paragraph(with_section_title_text("Average Level") + f": {rating_label_from_average(ev.average_rating)}", small_h3_ar))
-        story.append(Paragraph(f"{with_translation_text('Attendance and punctuality')}: {rating_label(ev.attendance_and_punctuality)}", arabic_label_style))
+        story.append(Paragraph(with_section_title_html("Average Level", english_font_name=small_h3.fontName, arabic_font_name=arabic_font) + f": {rating_bilingual_html_from_average(ev.average_rating)}", small_h3))
+        attendance_html = with_translation_html("Attendance and punctuality", english_font_name=normal_small.fontName, arabic_font_name=arabic_font)
+        story.append(Paragraph(f"{attendance_html}: {rating_bilingual_html(ev.attendance_and_punctuality)}", normal_small))
         story.append(Paragraph(f"Coach: {ev.coach}", normal_small))
         if ev.notes:
             story.append(Spacer(1, 4))
@@ -356,7 +447,15 @@ def build_player_report(player) -> bytes:
         story.append(Spacer(1, 10))
         story.append(Paragraph("رأي المدرب وما يحتاج اللاعب تطويره", arabic_right_heading))
 
-    doc.build(story)
+    try:
+        doc.build(story)
+    except OSError:
+        # Fallback minimal PDF to avoid 500 errors
+        SimpleDocTemplate(buffer, pagesize=A4).build([
+            Paragraph("Player Report", styles["Title"]),
+            Spacer(1, 12),
+            Paragraph(f"Name: {player.name}", styles["Normal"]),
+        ])
     pdf = buffer.getvalue()
     buffer.close()
     return pdf
