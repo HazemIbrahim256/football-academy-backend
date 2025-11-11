@@ -19,6 +19,12 @@ A standalone Django REST API for the Football Academy. Provides endpoints for au
 
 - `pip install -r requirements.txt`
 
+### Arabic PDF Rendering
+
+- The PDF reports include Arabic text. Ensure at least one Arabic-capable TrueType font is available on the server.
+- The backend auto-detects common fonts (Noto Naskh Arabic, DejaVu Sans, Arial, Tahoma) across Windows/Linux/macOS.
+- If Arabic still shows as boxes, place a font file like `NotoNaskhArabic-Regular.ttf` or `DejaVuSans.ttf` under `academy/core/fonts/` and restart the server.
+
 3) Configure environment
 
 - Copy `.env.example` to `.env` and edit values:
