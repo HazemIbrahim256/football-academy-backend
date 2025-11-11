@@ -93,6 +93,26 @@ class GroupViewSet(viewsets.ModelViewSet):
         response["Content-Disposition"] = f'attachment; filename="group_{group.id}_report.pdf"'
         return response
 
+    @action(detail=True, methods=["patch"], url_path="rename", permission_classes=[IsAuthenticated, IsAdmin])
+    def rename(self, request, pk=None):
+        """Admin-only endpoint to change a group's name.
+
+        Expects JSON body: { "name": "New Name" }
+        """
+        group = self.get_object()
+        new_name = request.data.get("name")
+        if new_name is None:
+            return Response({"detail": "Field 'name' is required."}, status=status.HTTP_400_BAD_REQUEST)
+        if not isinstance(new_name, str) or not new_name.strip():
+            return Response({"detail": "Group name must be a non-empty string."}, status=status.HTTP_400_BAD_REQUEST)
+        cleaned = new_name.strip()
+        # Avoid unnecessary save if unchanged
+        if cleaned != group.name:
+            group.name = cleaned
+            group.save(update_fields=["name"])
+        serializer = GroupSerializer(group, context=self.get_serializer_context())
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
     @action(detail=True, methods=["post"], url_path="reset-evaluations")
     def reset_evaluations(self, request, pk=None):
         """Reset all player evaluations in this group to null values.
