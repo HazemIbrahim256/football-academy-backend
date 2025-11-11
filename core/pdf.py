@@ -7,14 +7,25 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab import rl_config
 from reportlab.lib.enums import TA_RIGHT
+from reportlab.lib.utils import ImageReader
 
 from django.conf import settings
 from pathlib import Path
 
 
 def _safe_image(path, width=100, height=100):
+    """Return an Image flowable if the resource is readable; otherwise None.
+
+    ReportLab often loads images lazily at build time, which can trigger
+    OSError later. Proactively verify readability via ImageReader first.
+    """
     try:
-        return Image(path, width=width, height=height)
+        p = Path(path)
+        if not p.exists() or not p.is_file():
+            return None
+        # Attempt to read to ensure the file is a valid image
+        ImageReader(str(p))
+        return Image(str(p), width=width, height=height)
     except Exception:
         return None
 
@@ -241,8 +252,10 @@ def build_group_report(group) -> bytes:
     for p in group.players.select_related("evaluation").all():
         img = None
         if p.photo:
-            img_path = Path(settings.MEDIA_ROOT) / p.photo.name
-            img = _safe_image(str(img_path), width=50, height=50)
+            img_path = getattr(p.photo, "path", None)
+            if not img_path:
+                img_path = str(Path(settings.MEDIA_ROOT) / p.photo.name)
+            img = _safe_image(img_path, width=50, height=50)
         row = [img if img else "", p.name, getattr(p, "phone", "")]
         ev = getattr(p, "evaluation", None)
         if ev:
@@ -318,8 +331,11 @@ def build_player_report(player) -> bytes:
 
     img = None
     if player.photo:
-        img_path = Path(settings.MEDIA_ROOT) / player.photo.name
-        img = _safe_image(str(img_path), width=100, height=100)
+        # Prefer Django's storage absolute path when available; otherwise fall back
+        img_path = getattr(player.photo, "path", None)
+        if not img_path:
+            img_path = str(Path(settings.MEDIA_ROOT) / player.photo.name)
+        img = _safe_image(img_path, width=100, height=100)
 
     header_table = Table(
         [[title_para, img if img else ""], [details_para, ""]],
