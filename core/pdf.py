@@ -31,6 +31,41 @@ def _safe_image(path, width=100, height=100):
         return None
 
 
+def _logo_image(width: int = 60, height: int = 60):
+    """Return the academy logo Image flowable if found.
+
+    Tries multiple likely locations across this repo so development and
+    deployment both work without configuration.
+    """
+    try:
+        base = Path(__file__).resolve().parent
+        backend_root = base.parent
+        # Typical Django BASE_DIR points at the project dir (academy)
+        base_dir = Path(getattr(settings, "BASE_DIR", backend_root)).resolve()
+
+        candidates = [
+            base / "logo.png",
+            base / "fonts" / "logo.png",
+            backend_root / "core" / "logo.png",
+            backend_root / "core" / "fonts" / "logo.png",
+            # Frontend public assets in monorepo
+            base_dir.parent / "football-academy-frontend" / "public" / "logo.png",
+            base_dir.parent.parent / "football-academy-frontend" / "public" / "logo.png",
+        ]
+
+        for p in candidates:
+            img = _safe_image(p, width=width, height=height)
+            if img:
+                try:
+                    img.hAlign = "LEFT"
+                except Exception:
+                    pass
+                return img
+    except Exception:
+        pass
+    return None
+
+
 # Rating label helpers (1–5)
 RATING_LABELS = {
     1: "Bad",
@@ -179,17 +214,19 @@ def with_translation_text(label: str) -> str:
 
 
 def with_translation_html(label: str, english_font_name: str = "Helvetica", arabic_font_name: str | None = None) -> str:
-    """Return inline bilingual HTML: English / Arabic (shaped), with fonts."""
+    """Return inline bilingual HTML: English - Arabic (shaped), with fonts."""
     ar_font = arabic_font_name or _register_arabic_font()
     tr = SKILL_TRANSLATIONS_AR.get(label)
     if tr:
         shaped = _shape_arabic(tr)
-        return f'<font name="{english_font_name}">{label}</font> / <font name="{ar_font}">{shaped}</font>'
+        return f'<font name="{english_font_name}">{label}</font> - <font name="{ar_font}">{shaped}</font>'
     return f'<font name="{english_font_name}">{label}</font>'
 
 
 def with_translation_para(label: str, style) -> Paragraph:
-    html = with_translation_html(label, english_font_name=getattr(style, "fontName", "Helvetica"), arabic_font_name=_register_arabic_font())
+    # Use a Latin-capable font for English part to ensure visibility,
+    # while the paragraph style controls size/leading.
+    html = with_translation_html(label, english_font_name="Helvetica", arabic_font_name=_register_arabic_font())
     return Paragraph(html, style)
 
 # Section title translations (bilingual headers)
@@ -258,10 +295,22 @@ def build_group_report(group) -> bytes:
     styles = getSampleStyleSheet()
     story = []
 
-    title = f"Group Report: {group.name}"
-    story.append(Paragraph(title, styles["Title"]))
-    story.append(Spacer(1, 12))
-    story.append(Paragraph(f"Coach: {group.coach}", styles["Heading2"]))
+    # Header with logo on the top-left
+    logo = _logo_image(width=60, height=60)
+    title_para = Paragraph(f"Group Report: {group.name}", styles["Title"])
+    coach_para = Paragraph(f"Coach: {group.coach}", styles["Heading2"])
+    header = Table(
+        [[logo if logo else "", title_para], ["", coach_para]],
+        colWidths=[70, None],
+    )
+    header.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    story.append(header)
     story.append(Spacer(1, 12))
 
     # Summary table with phone and average rating
@@ -336,7 +385,7 @@ def build_player_report(player) -> bytes:
     arabic_right_heading = small_h3_ar.clone("ArabicRightHeading")
     arabic_right_heading.alignment = TA_RIGHT
 
-    # Header with photo on the right
+    # Header with logo on the left and photo on the right
     title_para = Paragraph("Player Report", small_title)
     details_lines = [
         f"Name: {player.name}",
@@ -355,13 +404,14 @@ def build_player_report(player) -> bytes:
             img_path = str(Path(settings.MEDIA_ROOT) / player.photo.name)
         img = _safe_image(img_path, width=100, height=100)
 
+    logo = _logo_image(width=60, height=60)
     header_table = Table(
-        [[title_para, img if img else ""], [details_para, ""]],
-        colWidths=[None, 110],
+        [[logo if logo else "", title_para, img if img else ""], ["", details_para, ""]],
+        colWidths=[70, None, 110],
     )
     header_table.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+        ("ALIGN", (2, 0), (2, 0), "RIGHT"),
         ("LEFTPADDING", (0, 0), (-1, -1), 0),
         ("RIGHTPADDING", (0, 0), (-1, -1), 0),
         ("TOPPADDING", (0, 0), (-1, -1), 0),
