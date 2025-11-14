@@ -48,7 +48,7 @@ class CoachViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         coach = self.get_object()
-        # Prevent deletion if coach is assigned to any group (PROTECT)
+        
         if coach.groups.exists():
             return Response({"detail": "Coach has one or more assigned groups. Reassign or remove those groups first."}, status=status.HTTP_400_BAD_REQUEST)
         user = coach.user
