@@ -190,6 +190,13 @@ class PlayerViewSet(viewsets.ModelViewSet):
             return Player.objects.filter(group__coach=coach).select_related("group__coach__user")
         return Player.objects.none()
 
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        month = self.request.query_params.get("month")
+        if month:
+            ctx["attendance_month"] = month
+        return ctx
+
     def destroy(self, request, *args, **kwargs):
         """Override destroy to avoid queryset-based object lookup causing false 404s.
 
@@ -227,10 +234,61 @@ class PlayerViewSet(viewsets.ModelViewSet):
     def report_pdf(self, request, pk=None):
         player = self.get_object()
         self.check_object_permissions(request, player)
-        pdf_bytes = build_player_report(player)
+        # Optional month filter (YYYY-MM) to make the PDF month-aware for attendance
+        month_str = request.query_params.get("month")
+        month_date = None
+        if month_str:
+            try:
+                year, month = [int(x) for x in month_str.split("-")]
+                from datetime import date
+                month_date = date(year, month, 1)
+            except Exception:
+                # Ignore invalid month; fall back to current month inside builder
+                month_date = None
+
+        pdf_bytes = build_player_report(player, month=month_date)
         response = HttpResponse(pdf_bytes, content_type="application/pdf")
         response["Content-Disposition"] = f'attachment; filename="player_{player.id}_report.pdf"'
         return response
+
+    @action(detail=True, methods=["get", "put", "patch"], url_path="attendance")
+    def attendance(self, request, pk=None):
+        """Get or set monthly attendance for a player.
+
+        Use query param 'month' in 'YYYY-MM' format and body {"days": <int>} for updates.
+        """
+        player = self.get_object()
+        # object-level permission check against the player
+        self.check_object_permissions(request, player)
+
+        month_str = request.query_params.get("month")
+        if not month_str:
+            return Response({"detail": "month is required (YYYY-MM)"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            year, month = [int(x) for x in month_str.split("-")]
+            from datetime import date
+            month_date = date(year, month, 1)
+        except Exception:
+            return Response({"detail": "Invalid month format; expected YYYY-MM"}, status=status.HTTP_400_BAD_REQUEST)
+
+        from .models import PlayerAttendance
+        rec, _ = PlayerAttendance.objects.get_or_create(player=player, month=month_date)
+
+        if request.method in ("PUT", "PATCH"):
+            days = request.data.get("days")
+            if days is None:
+                return Response({"detail": "days is required"}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                days = int(days)
+            except Exception:
+                return Response({"detail": "days must be an integer"}, status=status.HTTP_400_BAD_REQUEST)
+            # Attendance is tracked as classes attended per month; maximum is 8
+            if days < 0 or days > 8:
+                return Response({"detail": "days must be between 0 and 8"}, status=status.HTTP_400_BAD_REQUEST)
+            rec.days = days
+            rec.save()
+
+        return Response({"player": player.id, "month": month_str, "days": rec.days}, status=status.HTTP_200_OK)
 
 
 class PlayerEvaluationViewSet(viewsets.ModelViewSet):
@@ -295,41 +353,6 @@ class PlayerEvaluationViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("Coaches can only update evaluations within their group.")
         serializer.save(coach=coach)
 
-    @action(detail=True, methods=["get", "put", "patch"], url_path="attendance")
-    def attendance(self, request, pk=None):
-        """Get or set monthly attendance for a player.
-
-        Use query param 'month' in 'YYYY-MM' format and body {"days": <int>} for updates.
-        """
-        player = self.get_object()
-        self.check_object_permissions(request, player)
-        month_str = request.query_params.get("month")
-        if not month_str:
-            return Response({"detail": "month is required (YYYY-MM)"}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            year, month = [int(x) for x in month_str.split("-")]
-            from datetime import date
-            month_date = date(year, month, 1)
-        except Exception:
-            return Response({"detail": "Invalid month format; expected YYYY-MM"}, status=status.HTTP_400_BAD_REQUEST)
-
-        from .models import PlayerAttendance
-        rec, _ = PlayerAttendance.objects.get_or_create(player=player, month=month_date)
-
-        if request.method in ("PUT", "PATCH"):
-            days = request.data.get("days")
-            if days is None:
-                return Response({"detail": "days is required"}, status=status.HTTP_400_BAD_REQUEST)
-            try:
-                days = int(days)
-            except Exception:
-                return Response({"detail": "days must be an integer"}, status=status.HTTP_400_BAD_REQUEST)
-            if days < 0 or days > 365:
-                return Response({"detail": "days must be between 0 and 365"}, status=status.HTTP_400_BAD_REQUEST)
-            rec.days = days
-            rec.save()
-
-        return Response({"player": player.id, "month": month_str, "days": rec.days}, status=status.HTTP_200_OK)
 
 
 class SignupView(APIView):

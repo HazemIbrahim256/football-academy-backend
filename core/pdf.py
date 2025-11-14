@@ -411,7 +411,7 @@ def build_group_report(group) -> bytes:
     return pdf
 
 
-def build_player_report(player) -> bytes:
+def build_player_report(player, month=None) -> bytes:
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=24, rightMargin=24, topMargin=24, bottomMargin=24)
     styles = getSampleStyleSheet()
@@ -439,6 +439,28 @@ def build_player_report(player) -> bytes:
     small_h3_ar.fontName = arabic_font
     arabic_right_heading = small_h3_ar.clone("ArabicRightHeading")
     arabic_right_heading.alignment = TA_RIGHT
+
+    # Determine selected month for attendance summary (default: current month)
+    from datetime import date
+    try:
+        selected_month = (month or date.today().replace(day=1))
+    except Exception:
+        selected_month = date.today().replace(day=1)
+    # Lookup monthly attendance for the player
+    monthly_attendance_days = 0
+    try:
+        from .models import PlayerAttendance
+        rec = PlayerAttendance.objects.filter(player=player, month=selected_month).first()
+        if rec:
+            monthly_attendance_days = int(rec.days or 0)
+    except Exception:
+        monthly_attendance_days = getattr(player, "attendance_days", 0) or 0
+    # Cap within 0–8 and compute percentage
+    if monthly_attendance_days < 0:
+        monthly_attendance_days = 0
+    if monthly_attendance_days > 8:
+        monthly_attendance_days = 8
+    monthly_attendance_pct = round((monthly_attendance_days / 8) * 100) if monthly_attendance_days >= 0 else 0
 
     # Header with logo on the left and photo on the right
     title_para = Paragraph("Player Report", small_title)
@@ -579,7 +601,11 @@ def build_player_report(player) -> bytes:
         # Overall
         story.append(Paragraph(with_section_title_html("Average Level", english_font_name=small_h3.fontName, arabic_font_name=arabic_font) + f": {rating_bilingual_html_from_average(ev.average_rating)}", small_h3))
         attendance_html = with_translation_html("Attendance and punctuality", english_font_name=normal_small.fontName, arabic_font_name=arabic_font)
-        story.append(Paragraph(f"{attendance_html}: {rating_bilingual_html(ev.attendance_and_punctuality)}", normal_small))
+        # Append monthly attendance summary next to the label (e.g., "6/8 (75%)")
+        story.append(Paragraph(
+            f"{attendance_html}: {rating_bilingual_html(ev.attendance_and_punctuality)}  — Monthly attendance: {monthly_attendance_days}/8 ({monthly_attendance_pct}%)",
+            normal_small,
+        ))
         story.append(Paragraph(f"Coach: {ev.coach}", normal_small))
         if ev.notes:
             story.append(Spacer(1, 4))
