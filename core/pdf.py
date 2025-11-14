@@ -12,6 +12,8 @@ from reportlab.lib.utils import ImageReader
 from django.conf import settings
 from pathlib import Path
 from datetime import datetime
+from urllib.request import urlopen
+from urllib.parse import urljoin
 
 
 def _safe_image(path, width=100, height=100):
@@ -27,6 +29,37 @@ def _safe_image(path, width=100, height=100):
         # Attempt to read to ensure the file is a valid image
         ImageReader(str(p))
         return Image(str(p), width=width, height=height)
+    except Exception:
+        return None
+
+
+def _url_image(url: str, width: int = 100, height: int = 100):
+    """Return an Image from an HTTP(S) URL if retrievable; otherwise None."""
+    try:
+        if not url or not (url.startswith("http://") or url.startswith("https://")):
+            return None
+        with urlopen(url, timeout=6) as resp:
+            data = resp.read()
+        img_reader = ImageReader(BytesIO(data))
+        return Image(img_reader, width=width, height=height)
+    except Exception:
+        return None
+
+
+def _image_from_field(field, width: int = 100, height: int = 100):
+    """Return an Image from a Django FileField/FieldFile, reading bytes via storage.
+
+    This avoids reliance on local filesystem paths and works with remote storages.
+    """
+    try:
+        # FieldFile.open sets up the file object on the storage; ensure close afterwards
+        field.open("rb")
+        try:
+            data = field.read()
+        finally:
+            field.close()
+        img_reader = ImageReader(BytesIO(data))
+        return Image(img_reader, width=width, height=height)
     except Exception:
         return None
 
@@ -61,6 +94,18 @@ def _logo_image(width: int = 60, height: int = 60):
                 except Exception:
                     pass
                 return img
+    except Exception:
+        pass
+    # Final fallback: configurable logo URL
+    try:
+        logo_url = getattr(settings, "LOGO_URL", "")
+        img = _url_image(logo_url, width=width, height=height)
+        if img:
+            try:
+                img.hAlign = "LEFT"
+            except Exception:
+                pass
+            return img
     except Exception:
         pass
     return None
@@ -319,10 +364,20 @@ def build_group_report(group) -> bytes:
     for p in group.players.prefetch_related("evaluations").all():
         img = None
         if p.photo:
-            img_path = getattr(p.photo, "path", None)
-            if not img_path:
-                img_path = str(Path(settings.MEDIA_ROOT) / p.photo.name)
-            img = _safe_image(img_path, width=50, height=50)
+            # Prefer storage bytes (works for local and remote storages)
+            img = _image_from_field(p.photo, width=50, height=50)
+            if not img:
+                # Fallback to local filesystem path
+                img_path = getattr(p.photo, "path", None)
+                if not img_path:
+                    img_path = str(Path(settings.MEDIA_ROOT) / p.photo.name)
+                img = _safe_image(img_path, width=50, height=50)
+                if not img:
+                    # Last resort: try via PUBLIC_BASE_URL + relative media URL
+                    url = getattr(p.photo, "url", None)
+                    base = getattr(settings, "PUBLIC_BASE_URL", "")
+                    if url and base and url.startswith("/"):
+                        img = _url_image(urljoin(base + "/", url.lstrip("/")), width=50, height=50)
         row = [img if img else "", p.name, getattr(p, "phone", "")]
         ev = _latest_evaluation(p)
         if ev:
@@ -398,11 +453,20 @@ def build_player_report(player) -> bytes:
 
     img = None
     if player.photo:
-        # Prefer Django's storage absolute path when available; otherwise fall back
-        img_path = getattr(player.photo, "path", None)
-        if not img_path:
-            img_path = str(Path(settings.MEDIA_ROOT) / player.photo.name)
-        img = _safe_image(img_path, width=100, height=100)
+        # Prefer reading bytes directly from storage
+        img = _image_from_field(player.photo, width=100, height=100)
+        if not img:
+            # Fallback to local filesystem path
+            img_path = getattr(player.photo, "path", None)
+            if not img_path:
+                img_path = str(Path(settings.MEDIA_ROOT) / player.photo.name)
+            img = _safe_image(img_path, width=100, height=100)
+            if not img:
+                # Last resort: attempt via PUBLIC_BASE_URL + relative media URL
+                url = getattr(player.photo, "url", None)
+                base = getattr(settings, "PUBLIC_BASE_URL", "")
+                if url and base and url.startswith("/"):
+                    img = _url_image(urljoin(base + "/", url.lstrip("/")), width=100, height=100)
 
     logo = _logo_image(width=60, height=60)
     header_table = Table(

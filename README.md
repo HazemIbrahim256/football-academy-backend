@@ -71,6 +71,17 @@ Notes:
 - Media files served in development from `MEDIA_URL` and stored in `academy/media/`.
 - For production, configure proper static/media hosting.
 
+### PDF Images in Production
+
+The PDF generator can include the academy logo and player photos. In minimal production environments (e.g., Railway), local files or monorepo paths used in development may not be present. Configure these environment variables to ensure images render:
+
+- `DJANGO_LOGO_URL` — Absolute URL to your logo image (e.g., `https://football-academy-frontend.vercel.app/logo.png`).
+- `DJANGO_PUBLIC_BASE_URL` — Public base URL of your backend (e.g., `https://football-academy-backend-production.up.railway.app`). Used to construct absolute URLs from relative media paths when storage paths are unavailable.
+
+Notes:
+- Player photos are read directly from Django storage (works with local and remote storages). If the file is missing on disk (ephemeral storage), the PDF will try `DJANGO_PUBLIC_BASE_URL + MEDIA_URL + name` as a last resort.
+- For reliable media persistence in production, use durable storage (S3/GCS/etc.) rather than ephemeral filesystem.
+
 ## Deployment Checklist (Production)
 
 - Configure environment:
@@ -93,4 +104,6 @@ Notes:
   - `DJANGO_DEBUG=false`
   - `DJANGO_ALLOWED_HOSTS=football-academy-backend-production.up.railway.app`
   - `DJANGO_CORS_ALLOWED_ORIGINS=https://football-academy-frontend.vercel.app`
+  - `DJANGO_LOGO_URL=https://football-academy-frontend.vercel.app/logo.png`
+  - `DJANGO_PUBLIC_BASE_URL=https://football-academy-backend-production.up.railway.app`
   - Optionally `DJANGO_CSRF_TRUSTED_ORIGINS=https://football-academy-frontend.vercel.app`

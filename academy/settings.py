@@ -132,6 +132,15 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
+# Public base URL (e.g., https://api.example.com) used to form absolute URLs
+# in contexts like PDF generation when only relative paths are available.
+# Optional; leave empty if not needed.
+PUBLIC_BASE_URL = os.getenv("DJANGO_PUBLIC_BASE_URL", "").rstrip("/")
+
+# Logo URL for PDF headers; if provided, the PDF generator will fetch the logo
+# image from this absolute URL as a fallback when local files are unavailable.
+LOGO_URL = os.getenv("DJANGO_LOGO_URL", "")
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REST_FRAMEWORK = {
