@@ -143,7 +143,7 @@ def rating_label_from_average(avg: float | None) -> str:
 # Arabic translations for skill labels
 SKILL_TRANSLATIONS_AR = {
     # Technical Skills
-    "Ball control": "التحكم في الكرة",
+    "Ball receiving and post-reception action": "(إستقبال الكرة و التصرف الثاني بعد الإستقبال)",
     "Passing": "التمرير",
     "Dribbling": "المراوغة",
     "Shooting": "التسديد",
@@ -154,14 +154,14 @@ SKILL_TRANSLATIONS_AR = {
     "Endurance": "التحمل",
     "Strength": "القوة",
     # Technical Understanding
-    "Positioning": "التمركز",
-    "Decision making": "اتخاذ القرار",
-    "Game awareness": "الوعي بالمباراة",
+    "Awareness of correct positioning": "الوعي بالتمركزات الصحيحة",
+    "make the right decisions during the game": "إتخاذ القرارات الصحيحة اثناء المباراة",
+    "Awareness of opponents and teammates": "الوعي بالخصم و الزملاء",
     "Teamwork": "العمل الجماعي",
     # Psychological and Social
     "Respect": "الاحترام",
     "Sportsmanship": "الروح الرياضية",
-    "Confidence": "الثقة",
+    "Self-confidence": "الثقة بالنفس",
     "Leadership": "القيادة",
     # Overall
     "Attendance and punctuality": "الانضباط والالتزام بالمواعيد",
@@ -276,10 +276,10 @@ def with_translation_para(label: str, style) -> Paragraph:
 
 # Section title translations (bilingual headers)
 SECTION_TRANSLATIONS_AR = {
-    "Technical Skills": "مهارات تقنية",
-    "Physical Abilities": "القدرات البدنية",
-    "Technical Understanding": "الفهم الفني",
-    "Psychological and Social": "الجوانب النفسية والاجتماعية",
+    "Technical skills in relation to the football context (decision making)": "مهارات فنية مرتبطة بالمباراه (خاصة بإتخاذ القرار))",
+    "Physical abilities in relation to the football context": "(القدرات البدنية في سياق كرة القدم)",
+    "Tactical skills should be in the context of (awareness and decision making)": "(المهارات الخططية في سياق (الوعي وإتخاذ القرار))",
+    "Psychological and mental aspects should be in the context of life skills": "الجوانب النفسية و الذهنية في اطار مهارات الحياة",
     "Average Level": "المستوى العام",
 }
 
@@ -300,8 +300,8 @@ def with_section_title_html(title: str, english_font_name: str = "Helvetica", ar
 
 # Arabic translations for rating labels
 RATING_TRANSLATIONS_AR = {
-    "Bad": "سيئ",
-    "Not bad": "ليس سيئًا",
+    "Bad": "يحتاج إلى تطوير",
+    "Not bad": "مقبول",
     "Good": "جيد",
     "Very Good": "جيد جدًا",
     "Excellent": "ممتاز",
@@ -476,24 +476,24 @@ def build_player_report(player, month=None) -> bytes:
     img = None
     if player.photo:
         # Prefer reading bytes directly from storage
-        img = _image_from_field(player.photo, width=100, height=100)
+        img = _image_from_field(player.photo, width=60, height=60)
         if not img:
             # Fallback to local filesystem path
             img_path = getattr(player.photo, "path", None)
             if not img_path:
                 img_path = str(Path(settings.MEDIA_ROOT) / player.photo.name)
-            img = _safe_image(img_path, width=100, height=100)
+            img = _safe_image(img_path, width=60, height=60)
             if not img:
                 # Last resort: attempt via PUBLIC_BASE_URL + relative media URL
                 url = getattr(player.photo, "url", None)
                 base = getattr(settings, "PUBLIC_BASE_URL", "")
                 if url and base and url.startswith("/"):
-                    img = _url_image(urljoin(base + "/", url.lstrip("/")), width=100, height=100)
+                    img = _url_image(urljoin(base + "/", url.lstrip("/")), width=60, height=60)
 
     logo = _logo_image(width=60, height=60)
     header_table = Table(
         [[logo if logo else "", title_para, img if img else ""], ["", details_para, ""]],
-        colWidths=[70, None, 110],
+        colWidths=[70, None, 80],
     )
     header_table.setStyle(TableStyle([
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
@@ -509,11 +509,11 @@ def build_player_report(player, month=None) -> bytes:
     # Use the latest evaluation for the player (FK relation)
     ev = _latest_evaluation(player)
     if ev:
-        # Technical Skills
-        story.append(Paragraph(with_section_title_html("Technical Skills", english_font_name=small_h3.fontName, arabic_font_name=arabic_font), small_h3))
+        # Technical Skills (contextualized)
+        story.append(Paragraph(with_section_title_html("Technical skills in relation to the football context (decision making)", english_font_name=small_h3.fontName, arabic_font_name=arabic_font), small_h3))
         tech_data = [
             ["Skill", "Rating"],
-            [with_translation_para("Ball control", arabic_label_style), Paragraph(rating_bilingual_html(ev.ball_control), normal_small)],
+            [with_translation_para("Ball receiving and post-reception action", arabic_label_style), Paragraph(rating_bilingual_html(ev.ball_control), normal_small)],
             [with_translation_para("Passing", arabic_label_style), Paragraph(rating_bilingual_html(ev.passing), normal_small)],
             [with_translation_para("Dribbling", arabic_label_style), Paragraph(rating_bilingual_html(ev.dribbling), normal_small)],
             [with_translation_para("Shooting", arabic_label_style), Paragraph(rating_bilingual_html(ev.shooting), normal_small)],
@@ -532,8 +532,8 @@ def build_player_report(player, month=None) -> bytes:
         story.append(tech_table)
         story.append(Spacer(1, 6))
 
-        # Physical Abilities
-        story.append(Paragraph(with_section_title_html("Physical Abilities", english_font_name=small_h3.fontName, arabic_font_name=arabic_font), small_h3))
+        # Physical Abilities (contextualized)
+        story.append(Paragraph(with_section_title_html("Physical abilities in relation to the football context", english_font_name=small_h3.fontName, arabic_font_name=arabic_font), small_h3))
         phys_data = [
             ["Attribute", "Rating"],
             [with_translation_para("Speed", arabic_label_style), Paragraph(rating_bilingual_html(ev.speed), normal_small)],
@@ -554,13 +554,13 @@ def build_player_report(player, month=None) -> bytes:
         story.append(phys_table)
         story.append(Spacer(1, 6))
 
-        # Technical Understanding
-        story.append(Paragraph(with_section_title_html("Technical Understanding", english_font_name=small_h3.fontName, arabic_font_name=arabic_font), small_h3))
+        # Tactical skills (awareness and decision making)
+        story.append(Paragraph(with_section_title_html("Tactical skills should be in the context of (awareness and decision making)", english_font_name=small_h3.fontName, arabic_font_name=arabic_font), small_h3))
         tu_data = [
             ["Aspect", "Rating"],
-            [with_translation_para("Positioning", arabic_label_style), Paragraph(rating_bilingual_html(ev.positioning), normal_small)],
-            [with_translation_para("Decision making", arabic_label_style), Paragraph(rating_bilingual_html(ev.decision_making), normal_small)],
-            [with_translation_para("Game awareness", arabic_label_style), Paragraph(rating_bilingual_html(ev.game_awareness), normal_small)],
+            [with_translation_para("Awareness of correct positioning", arabic_label_style), Paragraph(rating_bilingual_html(ev.positioning), normal_small)],
+            [with_translation_para("make the right decisions during the game", arabic_label_style), Paragraph(rating_bilingual_html(ev.decision_making), normal_small)],
+            [with_translation_para("Awareness of opponents and teammates", arabic_label_style), Paragraph(rating_bilingual_html(ev.game_awareness), normal_small)],
             [with_translation_para("Teamwork", arabic_label_style), Paragraph(rating_bilingual_html(ev.teamwork), normal_small)],
         ]
         tu_table = Table(tu_data, repeatRows=1)
@@ -576,13 +576,13 @@ def build_player_report(player, month=None) -> bytes:
         story.append(tu_table)
         story.append(Spacer(1, 6))
 
-        # Psychological and Social
-        story.append(Paragraph(with_section_title_html("Psychological and Social", english_font_name=small_h3.fontName, arabic_font_name=arabic_font), small_h3))
+        # Psychological and mental (life skills context)
+        story.append(Paragraph(with_section_title_html("Psychological and mental aspects should be in the context of life skills", english_font_name=small_h3.fontName, arabic_font_name=arabic_font), small_h3))
         psy_data = [
             ["Aspect", "Rating"],
             [with_translation_para("Respect", arabic_label_style), Paragraph(rating_bilingual_html(ev.respect), normal_small)],
             [with_translation_para("Sportsmanship", arabic_label_style), Paragraph(rating_bilingual_html(ev.sportsmanship), normal_small)],
-            [with_translation_para("Confidence", arabic_label_style), Paragraph(rating_bilingual_html(ev.confidence), normal_small)],
+            [with_translation_para("Self-confidence", arabic_label_style), Paragraph(rating_bilingual_html(ev.confidence), normal_small)],
             [with_translation_para("Leadership", arabic_label_style), Paragraph(rating_bilingual_html(ev.leadership), normal_small)],
         ]
         psy_table = Table(psy_data, repeatRows=1)
