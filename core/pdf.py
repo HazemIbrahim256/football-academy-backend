@@ -513,8 +513,8 @@ def build_player_report(player, month=None) -> bytes:
         story.append(Paragraph(with_section_title_html("Technical skills in relation to the football context (decision making)", english_font_name=small_h3.fontName, arabic_font_name=arabic_font), small_h3))
         tech_data = [
             ["Skill", "Rating"],
-            [with_translation_para("Ball receiving and post-reception action", arabic_label_style), Paragraph(rating_bilingual_html(ev.ball_control), normal_small)],
             [with_translation_para("Passing", arabic_label_style), Paragraph(rating_bilingual_html(ev.passing), normal_small)],
+            [with_translation_para("Ball receiving and post-reception action", arabic_label_style), Paragraph(rating_bilingual_html(ev.ball_control), normal_small)],
             [with_translation_para("Dribbling", arabic_label_style), Paragraph(rating_bilingual_html(ev.dribbling), normal_small)],
             [with_translation_para("Shooting", arabic_label_style), Paragraph(rating_bilingual_html(ev.shooting), normal_small)],
             [with_translation_para("Using both feet", arabic_label_style), Paragraph(rating_bilingual_html(ev.using_both_feet), normal_small)],
